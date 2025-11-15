@@ -34,9 +34,11 @@ class AdversarialRunner(object):
         self,
         args,
         venv,
-        agent,
+        agent_1,
+        agent_2,
         ued_venv=None,
-        adversary_agent=None,
+        adversary_agent_1=None,
+        adversary_agent_2=None,
         adversary_env=None,
         flexible_protagonist=False,
         train=False,
@@ -64,8 +66,10 @@ class AdversarialRunner(object):
         self.is_discrete_adversary_env_actions = is_discrete_actions(self.venv, adversary=True)
 
         self.agents = {
-            'agent': agent,
-            'adversary_agent': adversary_agent,
+            'agent_1': agent_1,
+            'agent_2': agent_2,
+            'adversary_agent_1': adversary_agent_1,
+            'adversary_agent_2': adversary_agent_2,
             'adversary_env': adversary_env,
         }
 
@@ -182,8 +186,10 @@ class AdversarialRunner(object):
         self.sampled_level_info = None
 
         max_return_queue_size = 10
-        self.agent_returns = deque(maxlen=max_return_queue_size)
-        self.adversary_agent_returns = deque(maxlen=max_return_queue_size)
+        self.agent_returns_1 = deque(maxlen=max_return_queue_size)
+        self.agent_returns_2 = deque(maxlen=max_return_queue_size)
+        self.adversary_agent_returns_1 = deque(maxlen=max_return_queue_size)
+        self.adversary_agent_returns_2 = deque(maxlen=max_return_queue_size)
 
     def train(self):
         self.is_training = True
@@ -204,8 +210,10 @@ class AdversarialRunner(object):
         return {
             'agent_state_dict': agent_state_dict,
             'optimizer_state_dict': optimizer_state_dict,
-            'agent_returns': self.agent_returns,
-            'adversary_agent_returns': self.adversary_agent_returns,
+            'agent_returns_1': self.agent_returns_1,
+            'agent_returns_2': self.agent_returns_2,
+            'adversary_agent_returns_1': self.adversary_agent_returns_1,
+            'adversary_agent_returns_2': self.adversary_agent_returns_2,
             'num_updates': self.num_updates,
             'total_episodes_collected': self.total_episodes_collected,
             'total_seeds_collected': self.total_seeds_collected,
@@ -228,8 +236,10 @@ class AdversarialRunner(object):
         for k, state in optimizer_state_dict.items():
             self.agents[k].algo.optimizer.load_state_dict(state)
 
-        self.agent_returns = state_dict.get('agent_returns')
-        self.adversary_agent_returns = state_dict.get('adversary_agent_returns')
+        self.agent_returns_1 = state_dict.get('agent_returns_1')
+        self.agent_returns_2 = state_dict.get('agent_returns_2')
+        self.adversary_agent_returns_1 = state_dict.get('adversary_agent_returns_1')
+        self.adversary_agent_returns_2 = state_dict.get('adversary_agent_returns_2')
         self.num_updates = state_dict.get('num_updates')
         self.total_episodes_collected = state_dict.get('total_episodes_collected')
         self.total_seeds_collected = state_dict.get('total_seeds_collected')
@@ -720,34 +730,34 @@ class AdversarialRunner(object):
         
         return rollout_info
 
-    def _compute_env_return(self, agent_info, adversary_agent_info):
+    def _compute_env_return(self, agent_info_1, agent_info_2, adversary_agent_info_1, adversary_agent_info_2):
         args = self.args
         if args.ued_algo == 'paired':
-            env_return = torch.max(adversary_agent_info['max_return'] - agent_info['mean_return'], \
-                torch.zeros_like(agent_info['mean_return']))
+            env_return = torch.max( 0.5 * (adversary_agent_info_1['max_return'] + adversary_agent_info_2['max_return']) - 0.5 * (agent_info_1['mean_return'] + agent_info_2['mean_return']), \
+                torch.zeros_like(agent_info_1['mean_return']))
 
-        elif args.ued_algo == 'flexible_paired':
-            env_return = torch.zeros_like(agent_info['max_return'], dtype=torch.float, device=self.device)
-            adversary_agent_max_idx = adversary_agent_info['max_return'] > agent_info['max_return']
-            agent_max_idx = ~adversary_agent_max_idx
+        # elif args.ued_algo == 'flexible_paired':
+        #     env_return = torch.zeros_like(agent_info['max_return'], dtype=torch.float, device=self.device)
+        #     adversary_agent_max_idx = adversary_agent_info['max_return'] > agent_info['max_return']
+        #     agent_max_idx = ~adversary_agent_max_idx
 
-            env_return[adversary_agent_max_idx] = \
-                adversary_agent_info['max_return'][adversary_agent_max_idx]
-            env_return[agent_max_idx] = agent_info['max_return'][agent_max_idx]
+        #     env_return[adversary_agent_max_idx] = \
+        #         adversary_agent_info['max_return'][adversary_agent_max_idx]
+        #     env_return[agent_max_idx] = agent_info['max_return'][agent_max_idx]
             
-            env_mean_return = torch.zeros_like(env_return, dtype=torch.float)
-            env_mean_return[adversary_agent_max_idx] = \
-                agent_info['mean_return'][adversary_agent_max_idx]
-            env_mean_return[agent_max_idx] = \
-                adversary_agent_info['mean_return'][agent_max_idx]
+        #     env_mean_return = torch.zeros_like(env_return, dtype=torch.float)
+        #     env_mean_return[adversary_agent_max_idx] = \
+        #         agent_info['mean_return'][adversary_agent_max_idx]
+        #     env_mean_return[agent_max_idx] = \
+        #         adversary_agent_info['mean_return'][agent_max_idx]
 
-            env_return = torch.max(env_return - env_mean_return, torch.zeros_like(env_return))
+        #     env_return = torch.max(env_return - env_mean_return, torch.zeros_like(env_return))
 
-        elif args.ued_algo == 'minimax':
-            env_return = -agent_info['max_return']
+        # elif args.ued_algo == 'minimax':
+        #     env_return = -agent_info['max_return']
 
-        else:
-            env_return = torch.zeros_like(agent_info['mean_return'])
+        # else:
+        #     env_return = torch.zeros_like(agent_info['mean_return'])
 
         if args.adv_normalize_returns:
             self.env_return_rms.update(env_return.flatten().cpu().numpy())
@@ -763,8 +773,10 @@ class AdversarialRunner(object):
         args = self.args
 
         adversary_env = self.agents['adversary_env']
-        agent = self.agents['agent']
-        adversary_agent = self.agents['adversary_agent']
+        agent_1 = self.agents['agent_1']
+        agent_2 = self.agents['agent_2']
+        adversary_agent_1 = self.agents['adversary_agent_1']
+        adversary_agent_2 = self.agents['adversary_agent_2']
 
         level_replay = False
         if args.use_plr and self.is_training:
@@ -799,11 +811,13 @@ class AdversarialRunner(object):
         elif self.is_training and self.args.use_behavioural_cloning:
             if ((self.student_grad_updates) % self.args.kl_update_step == 0):
                 kl_dict_agent = {}
-                adversary_agent.eval()
-                kl_dict_agent['antagonist_model'] = adversary_agent.algo.actor_critic
+                adversary_agent_1.eval()
+                adversary_agent_2.eval()
+                kl_dict_agent['antagonist_model_1'] = adversary_agent_1.algo.actor_critic
+                kl_dict_agent['antagonist_model_2'] = adversary_agent_2.algo.actor_critic
                 
-        agent_info = self.agent_rollout(
-            agent=agent, 
+        agent_info_1 = self.agent_rollout(
+            agent=agent_1, 
             num_steps=self.agent_rollout_steps,
             update=self.is_training,
             level_replay=level_replay,
@@ -813,8 +827,21 @@ class AdversarialRunner(object):
             kl_dict=kl_dict_agent,
             update_agent_separately=self.use_accel_paired)
         
+        agent_info_2 = self.agent_rollout(
+            agent=agent_2, 
+            num_steps=self.agent_rollout_steps,
+            update=self.is_training,
+            level_replay=level_replay,
+            level_sampler=level_sampler,
+            update_level_sampler=is_updateable,
+            discard_grad=student_discard_grad,
+            kl_dict=kl_dict_agent,
+            update_agent_separately=self.use_accel_paired)
+        
+        
         if kl_dict_agent is not None:
-            adversary_agent.train()
+            adversary_agent_1.train()
+            adversary_agent_2.train()
 
         # Use a separate PLR curriculum for the antagonist
         if level_replay and self.is_paired and (args.protagonist_plr == args.antagonist_plr):
@@ -827,7 +854,8 @@ class AdversarialRunner(object):
                 level_sampler=self._get_level_sampler('adversary_agent')[0],
                 update_level_sampler=False)
 
-        adversary_agent_info = defaultdict(float)
+        adversary_agent_info_1 = defaultdict(float)
+        adversary_agent_info_2 = defaultdict(float)
         if self.is_paired:
             # Run adversary agent episodes
             level_sampler, is_updateable = self._get_level_sampler('adversary_agent')
@@ -837,11 +865,23 @@ class AdversarialRunner(object):
                 if self.is_training and self.args.use_behavioural_cloning:
                     if ((self.student_grad_updates) % self.args.kl_update_step == 0):
                         kl_dict_adv_agent = {}
-                        agent.eval()
-                        kl_dict_adv_agent['antagonist_model'] = agent.algo.actor_critic
+                        agent_1.eval()
+                        agent_2.eval()
+                        kl_dict_adv_agent['antagonist_model_1'] = agent_1.algo.actor_critic
+                        kl_dict_adv_agent['antagonist_model_2'] = agent_2.algo.actor_critic
                         
-            adversary_agent_info = self.agent_rollout(
-                agent=adversary_agent, 
+            adversary_agent_info_1 = self.agent_rollout(
+                agent=adversary_agent_1, 
+                num_steps=self.agent_rollout_steps, 
+                update=self.is_training,
+                level_replay=level_replay,
+                level_sampler=level_sampler,
+                update_level_sampler=is_updateable,
+                discard_grad=student_discard_grad,
+                kl_dict=kl_dict_adv_agent)
+            
+            adversary_agent_info_2 = self.agent_rollout(
+                agent=adversary_agent_2, 
                 num_steps=self.agent_rollout_steps, 
                 update=self.is_training,
                 level_replay=level_replay,
@@ -851,66 +891,67 @@ class AdversarialRunner(object):
                 kl_dict=kl_dict_adv_agent)
             
             if kl_dict_adv_agent is not None:
-                agent.train()
+                agent_1.train()
+                agent_2.train()
                 
-        elif self.use_accel_paired:
+        # elif self.use_accel_paired:
             
-            adversary_agent_info = self.agent_rollout(
-                agent=adversary_agent, 
-                num_steps=self.agent_rollout_steps, 
-                update=self.is_training,
-                level_replay=False,
-                level_sampler=None,
-                update_level_sampler=False,
-                discard_grad=student_discard_grad,
-                kl_dict=None,
-                update_agent_separately=self.use_accel_paired)
+        #     adversary_agent_info = self.agent_rollout(
+        #         agent=adversary_agent_1, 
+        #         num_steps=self.agent_rollout_steps, 
+        #         update=self.is_training,
+        #         level_replay=False,
+        #         level_sampler=None,
+        #         update_level_sampler=False,
+        #         discard_grad=student_discard_grad,
+        #         kl_dict=None,
+        #         update_agent_separately=self.use_accel_paired)
             
-            # calculate PAIRED regret estimate
-            external_scores = self._calculate_paired_regret_scores(agent_info, adversary_agent_info, type=args.accel_paired_score_function)
+        #     # calculate PAIRED regret estimate
+        #     external_scores = self._calculate_paired_regret_scores(agent_info, adversary_agent_info, type=args.accel_paired_score_function)
             
-            # update agent and its level sampler
-            level_sampler, is_updateable = self._get_level_sampler('agent')
+        #     # update agent and its level sampler
+        #     level_sampler, is_updateable = self._get_level_sampler('agent')
             
-            kl_dict_agent = None
-            if self.is_training and self.args.use_behavioural_cloning:
-                if ((self.student_grad_updates) % self.args.kl_update_step == 0):
-                    kl_dict_agent = {}
-                    adversary_agent.eval()
-                    kl_dict_agent['antagonist_model'] = adversary_agent.algo.actor_critic
+        #     kl_dict_agent = None
+        #     if self.is_training and self.args.use_behavioural_cloning:
+        #         if ((self.student_grad_updates) % self.args.kl_update_step == 0):
+        #             kl_dict_agent = {}
+        #             adversary_agent.eval()
+        #             kl_dict_agent['antagonist_model'] = adversary_agent.algo.actor_critic
             
-            agent_update_rollout_info = self._update_agent_separately(agent, 
-                                 level_sampler=level_sampler, 
-                                 update_level_sampler=is_updateable,
-                                 discard_grad=student_discard_grad,
-                                 kl_dict=kl_dict_agent,
-                                 external_scores=external_scores)
+        #     agent_update_rollout_info = self._update_agent_separately(agent, 
+        #                          level_sampler=level_sampler, 
+        #                          update_level_sampler=is_updateable,
+        #                          discard_grad=student_discard_grad,
+        #                          kl_dict=kl_dict_agent,
+        #                          external_scores=external_scores)
             
-            if kl_dict_agent is not None:
-                adversary_agent.train()
+        #     if kl_dict_agent is not None:
+        #         adversary_agent.train()
             
-            agent_info.update(agent_update_rollout_info)
+        #     agent_info.update(agent_update_rollout_info)
             
-            # update antagonist agent too
-            kl_dict_adv_agent = None
-            if not self.args.use_kl_only_agent:
-                if self.is_training and self.args.use_behavioural_cloning:
-                    if ((self.student_grad_updates) % self.args.kl_update_step == 0):
-                        kl_dict_adv_agent = {}
-                        agent.eval()
-                        kl_dict_adv_agent['antagonist_model'] = agent.algo.actor_critic
+        #     # update antagonist agent too
+        #     kl_dict_adv_agent = None
+        #     if not self.args.use_kl_only_agent:
+        #         if self.is_training and self.args.use_behavioural_cloning:
+        #             if ((self.student_grad_updates) % self.args.kl_update_step == 0):
+        #                 kl_dict_adv_agent = {}
+        #                 agent.eval()
+        #                 kl_dict_adv_agent['antagonist_model'] = agent.algo.actor_critic
             
-            adversary_agent_update_rollout_info = self._update_agent_separately(adversary_agent,
-                                 level_sampler=level_sampler, 
-                                 update_level_sampler=is_updateable,
-                                 discard_grad=student_discard_grad,
-                                 kl_dict=kl_dict_adv_agent,
-                                 external_scores=external_scores)
+        #     adversary_agent_update_rollout_info = self._update_agent_separately(adversary_agent,
+        #                          level_sampler=level_sampler, 
+        #                          update_level_sampler=is_updateable,
+        #                          discard_grad=student_discard_grad,
+        #                          kl_dict=kl_dict_adv_agent,
+        #                          external_scores=external_scores)
             
-            if kl_dict_adv_agent is not None:
-                agent.train()
+        #     if kl_dict_adv_agent is not None:
+        #         agent.train()
                 
-            adversary_agent_info.update(adversary_agent_update_rollout_info)
+        #     adversary_agent_info.update(adversary_agent_update_rollout_info)
 
         # Sample whether the decision to edit levels
         edit_level = self._should_edit_level() and level_replay
@@ -926,86 +967,86 @@ class AdversarialRunner(object):
                 'num_edits': [0 for _ in range(args.num_processes)]
             }
 
-        # ==== This part performs ACCEL ====
-        # If editing, mutate levels just replayed by PLR
-        if level_replay and edit_level:
-            # Choose base levels for mutation
-            if self.base_levels == 'batch':
-                fixed_seeds = env_info
-            elif self.base_levels == 'easy':
-                if self.use_accel_paired:
-                    # paired signed regret score
-                    regret_score = self._calculate_paired_regret_scores(agent_info, adversary_agent_info, type=args.accel_paired_score_function)
-                if args.num_processes >= 4:
-                    # take top 4
-                    if self.use_accel_paired:
-                        easy = list(np.argsort((regret_score.detach().cpu().numpy()).flatten())[:4])
-                    else:
-                        easy = list(np.argsort((agent_info['mean_return'].detach().cpu().numpy() - agent_info['batched_value_loss'].detach().cpu().numpy()).flatten())[:4])
-                    fixed_seeds = [env_info[x.item()] for x in easy] * int(args.num_processes/4)
-                else:
-                    # take top 1
-                    if self.use_accel_paired:
-                        easy = np.argmax((regret_score.detach().cpu().numpy()).flatten())
-                    else:
-                        easy = np.argmax((agent_info['mean_return'].detach().cpu().numpy() - agent_info['batched_value_loss'].detach().cpu().numpy()).flatten())
-                    fixed_seeds = [env_info[easy]] * args.num_processes
+        # # ==== This part performs ACCEL ====
+        # # If editing, mutate levels just replayed by PLR
+        # if level_replay and edit_level:
+        #     # Choose base levels for mutation
+        #     if self.base_levels == 'batch':
+        #         fixed_seeds = env_info
+        #     elif self.base_levels == 'easy':
+        #         if self.use_accel_paired:
+        #             # paired signed regret score
+        #             regret_score = self._calculate_paired_regret_scores(agent_info, adversary_agent_info, type=args.accel_paired_score_function)
+        #         if args.num_processes >= 4:
+        #             # take top 4
+        #             if self.use_accel_paired:
+        #                 easy = list(np.argsort((regret_score.detach().cpu().numpy()).flatten())[:4])
+        #             else:
+        #                 easy = list(np.argsort((agent_info['mean_return'].detach().cpu().numpy() - agent_info['batched_value_loss'].detach().cpu().numpy()).flatten())[:4])
+        #             fixed_seeds = [env_info[x.item()] for x in easy] * int(args.num_processes/4)
+        #         else:
+        #             # take top 1
+        #             if self.use_accel_paired:
+        #                 easy = np.argmax((regret_score.detach().cpu().numpy()).flatten())
+        #             else:
+        #                 easy = np.argmax((agent_info['mean_return'].detach().cpu().numpy() - agent_info['batched_value_loss'].detach().cpu().numpy()).flatten())
+        #             fixed_seeds = [env_info[easy]] * args.num_processes
 
-            level_sampler, is_updateable = self._get_level_sampler('agent')
+        #     level_sampler, is_updateable = self._get_level_sampler('agent')
 
-            # Edit selected levels
-            self.agent_rollout(
-                agent=None,
-                num_steps=None,
-                is_env=True,
-                edit_level=True,
-                num_edits=args.num_edits,
-                fixed_seeds=fixed_seeds)
+        #     # Edit selected levels
+        #     self.agent_rollout(
+        #         agent=None,
+        #         num_steps=None,
+        #         is_env=True,
+        #         edit_level=True,
+        #         num_edits=args.num_edits,
+        #         fixed_seeds=fixed_seeds)
 
-            self.total_num_edits += 1
-            sampled_level_info['num_edits'] = [x+1 for x in sampled_level_info['num_edits']]
+        #     self.total_num_edits += 1
+        #     sampled_level_info['num_edits'] = [x+1 for x in sampled_level_info['num_edits']]
 
-            # Evaluate edited levels
-            agent_info_edited_level = self.agent_rollout(
-                agent=agent,
-                num_steps=self.agent_rollout_steps,
-                update=self.is_training,
-                level_replay=False,
-                level_sampler=level_sampler,
-                update_level_sampler=is_updateable,
-                update_agent_separately=self.use_accel_paired,
-                discard_grad=True)
+        #     # Evaluate edited levels
+        #     agent_info_edited_level = self.agent_rollout(
+        #         agent=agent,
+        #         num_steps=self.agent_rollout_steps,
+        #         update=self.is_training,
+        #         level_replay=False,
+        #         level_sampler=level_sampler,
+        #         update_level_sampler=is_updateable,
+        #         update_agent_separately=self.use_accel_paired,
+        #         discard_grad=True)
             
-            if self.use_accel_paired:
-                adversary_agent_info_edited_level = self.agent_rollout(
-                    agent=adversary_agent,
-                    num_steps=self.agent_rollout_steps,
-                    update=self.is_training,
-                    level_replay=False,
-                    level_sampler=None,
-                    update_level_sampler=False,
-                    update_agent_separately=self.use_accel_paired,
-                    discard_grad=True)
+        #     if self.use_accel_paired:
+        #         adversary_agent_info_edited_level = self.agent_rollout(
+        #             agent=adversary_agent,
+        #             num_steps=self.agent_rollout_steps,
+        #             update=self.is_training,
+        #             level_replay=False,
+        #             level_sampler=None,
+        #             update_level_sampler=False,
+        #             update_agent_separately=self.use_accel_paired,
+        #             discard_grad=True)
                 
-                external_scores = self._calculate_paired_regret_scores(agent_info_edited_level, adversary_agent_info_edited_level, type=args.accel_paired_score_function)
+        #         external_scores = self._calculate_paired_regret_scores(agent_info_edited_level, adversary_agent_info_edited_level, type=args.accel_paired_score_function)
                 
-                # update agent level sampler
-                _ = self._update_agent_separately(agent, 
-                                    level_sampler=level_sampler, 
-                                    update_level_sampler=is_updateable,
-                                    discard_grad=True,
-                                    kl_dict=None,
-                                    external_scores=external_scores)
+        #         # update agent level sampler
+        #         _ = self._update_agent_separately(agent, 
+        #                             level_sampler=level_sampler, 
+        #                             update_level_sampler=is_updateable,
+        #                             discard_grad=True,
+        #                             kl_dict=None,
+        #                             external_scores=external_scores)
                 
                 
-                # update antagonist agent too
-                _ = self._update_agent_separately(adversary_agent,
-                                    level_sampler=level_sampler, 
-                                    update_level_sampler=is_updateable,
-                                    discard_grad=True,
-                                    kl_dict=None,
-                                    external_scores=external_scores)
-        # ==== ACCEL end ====
+        #         # update antagonist agent too
+        #         _ = self._update_agent_separately(adversary_agent,
+        #                             level_sampler=level_sampler, 
+        #                             update_level_sampler=is_updateable,
+        #                             discard_grad=True,
+        #                             kl_dict=None,
+        #                             external_scores=external_scores)
+        # # ==== ACCEL end ====
 
         if args.use_plr:
             self._reconcile_level_store_and_samplers()
@@ -1013,7 +1054,7 @@ class AdversarialRunner(object):
                 self.weighted_num_edits = self._get_weighted_num_edits()
 
         # Update adversary agent final return
-        env_return = self._compute_env_return(agent_info, adversary_agent_info)
+        env_return = self._compute_env_return(agent_info_1, agent_info_2, adversary_agent_info_1, adversary_agent_info_2)
 
         adversary_env_info = defaultdict(float)
         if self.is_training and self.is_training_env:
@@ -1037,35 +1078,49 @@ class AdversarialRunner(object):
 
         # === LOGGING ===
         # Only update env-related stats when run generates new envs (not level replay)
-        log_replay_complexity = level_replay and args.log_replay_complexity
-        if (not level_replay) or log_replay_complexity:
-            stats = self._get_env_stats(agent_info, adversary_agent_info, 
-                log_replay_complexity=log_replay_complexity)
-            stats.update({
-                'mean_env_return': env_return.mean().item(),
-                'adversary_env_pg_loss': adversary_env_info['action_loss'],
-                'adversary_env_value_loss': adversary_env_info['value_loss'],
-                'adversary_env_dist_entropy': adversary_env_info['dist_entropy'],
-            })
-            if args.use_plr:
-                self.latest_env_stats.update(stats) # Log latest UED curriculum stats instead of PLR env stats
-        else:
-            stats = self.latest_env_stats.copy()
+        # log_replay_complexity = level_replay and args.log_replay_complexity
+        # if (not level_replay) or log_replay_complexity:
+        #     stats = self._get_env_stats(agent_info, adversary_agent_info, 
+        #         log_replay_complexity=log_replay_complexity)
+        #     stats.update({
+        #         'mean_env_return': env_return.mean().item(),
+        #         'adversary_env_pg_loss': adversary_env_info['action_loss'],
+        #         'adversary_env_value_loss': adversary_env_info['value_loss'],
+        #         'adversary_env_dist_entropy': adversary_env_info['dist_entropy'],
+        #     })
+        #     if args.use_plr:
+        #         self.latest_env_stats.update(stats) # Log latest UED curriculum stats instead of PLR env stats
+        # else:
+
+        stats = self.latest_env_stats.copy()
 
         # Log PLR buffer stats
-        if args.use_plr and args.log_plr_buffer_stats:
-            stats.update(self._get_plr_buffer_stats())
+        # if args.use_plr and args.log_plr_buffer_stats:
+        #     stats.update(self._get_plr_buffer_stats())
 
-        [self.agent_returns.append(r) for b in agent_info['returns'] for r in reversed(b)]
-        mean_agent_return = 0
-        if len(self.agent_returns) > 0:
-            mean_agent_return = np.mean(self.agent_returns)
+        [self.agent_returns_1.append(r) for b in agent_info_1['returns'] for r in reversed(b)]
+        mean_agent_return_1 = 0
+        if len(self.agent_returns_1) > 0:
+            mean_agent_return_1 = np.mean(self.agent_returns_1)
+        
+        [self.agent_returns_2.append(r) for b in agent_info_2['returns'] for r in reversed(b)]
+        mean_agent_return_2 = 0
+        if len(self.agent_returns_2) > 0:
+            mean_agent_return_2 = np.mean(self.agent_returns_2)
 
-        mean_adversary_agent_return = 0
+
+
+        mean_adversary_agent_return_1 = 0
         if self.is_paired or self.use_accel_paired:
-            [self.adversary_agent_returns.append(r) for b in adversary_agent_info['returns'] for r in reversed(b)]
-            if len(self.adversary_agent_returns) > 0:
-                mean_adversary_agent_return = np.mean(self.adversary_agent_returns)
+            [self.adversary_agent_returns_1.append(r) for b in adversary_agent_info_1['returns'] for r in reversed(b)]
+            if len(self.adversary_agent_returns_1) > 0:
+                mean_adversary_agent_return_1 = np.mean(self.adversary_agent_returns_1)
+            
+        mean_adversary_agent_return_2 = 0
+        if self.is_paired or self.use_accel_paired:
+            [self.adversary_agent_returns_2.append(r) for b in adversary_agent_info_2['returns'] for r in reversed(b)]
+            if len(self.adversary_agent_returns_2) > 0:
+                mean_adversary_agent_return_2 = np.mean(self.adversary_agent_returns_2)
 
         self.sampled_level_info = sampled_level_info
 
@@ -1075,38 +1130,56 @@ class AdversarialRunner(object):
             'total_seeds': self.total_seeds_collected,
             'total_student_grad_updates': self.student_grad_updates,
 
-            'mean_agent_return': mean_agent_return,
-            'agent_value_loss': agent_info['value_loss'],
-            'agent_pg_loss': agent_info['action_loss'],
-            'agent_dist_entropy': agent_info['dist_entropy'],
+            'mean_agent_return_1': mean_agent_return_1,
+            'mean_agent_return_2': mean_agent_return_2,
+            'agent_value_loss_1': agent_info_1['value_loss'],
+            'agent_value_loss_2': agent_info_2['value_loss'],
+            'agent_pg_loss_1': agent_info_1['action_loss'],
+            'agent_pg_loss_2': agent_info_2['action_loss'],
+            'agent_dist_entropy_1': agent_info_1['dist_entropy'],
+            'agent_dist_entropy_2': agent_info_2['dist_entropy'],
 
-            'mean_adversary_agent_return': mean_adversary_agent_return,
-            'adversary_value_loss': adversary_agent_info['value_loss'],
-            'adversary_pg_loss': adversary_agent_info['action_loss'],
-            'adversary_dist_entropy': adversary_agent_info['dist_entropy'],
+            'mean_adversary_agent_return_1': mean_adversary_agent_return_1,
+            'mean_adversary_agent_return_2': mean_adversary_agent_return_2,
+            'adversary_value_loss_1': adversary_agent_info_1['value_loss'],
+            'adversary_value_loss_2': adversary_agent_info_2['value_loss'],
+            'adversary_pg_loss_1': adversary_agent_info_1['action_loss'],
+            'adversary_pg_loss_2': adversary_agent_info_2['action_loss'],
+            'adversary_dist_entropy_1': adversary_agent_info_1['dist_entropy'],
+            'adversary_dist_entropy_2': adversary_agent_info_2['dist_entropy'],
             
-            'kl_loss_advagent_agent': agent_info.get('kl_loss', None),
-            'kl_loss_agent_advagent': adversary_agent_info.get('kl_loss', None)
+            'kl_loss_advagent_agent_1': agent_info_1.get('kl_loss', None),
+            'kl_loss_advagent_agent_2': agent_info_2.get('kl_loss', None),
+
+            'kl_loss_agent_advagent_1': adversary_agent_info_1.get('kl_loss', None),
+            'kl_loss_agent_advagent_2': adversary_agent_info_2.get('kl_loss', None)
         })
 
         if args.log_grad_norm:
-            agent_grad_norm = np.mean(agent_info['update_info']['grad_norms'])
-            adversary_grad_norm = 0
+            agent_grad_norm_1 = np.mean(agent_info_1['update_info']['grad_norms'])
+            agent_grad_norm_2 = np.mean(agent_info_2['update_info']['grad_norms'])
+            adversary_grad_norm_1 = 0
+            adversary_grad_norm_2 = 0
             adversary_env_grad_norm = 0
             if self.is_paired:
-                adversary_grad_norm = np.mean(adversary_agent_info['update_info']['grad_norms'])
+                adversary_grad_norm_1 = np.mean(adversary_agent_info_1['update_info']['grad_norms'])
+                adversary_grad_norm_2 = np.mean(adversary_agent_info_2['update_info']['grad_norms'])
             if self.is_training_env:
                 adversary_env_grad_norm = np.mean(adversary_env_info['update_info']['grad_norms'])
             stats.update({
-                'agent_grad_norm': agent_grad_norm,
-                'adversary_grad_norm': adversary_grad_norm,
+                'agent_grad_norm_1': agent_grad_norm_1,
+                'agent_grad_norm_2': agent_grad_norm_2,
+                'adversary_grad_norm_1': adversary_grad_norm_1,
+                'adversary_grad_norm_2': adversary_grad_norm_2,
                 'adversary_env_grad_norm': adversary_env_grad_norm
             })
 
         if args.log_action_complexity:
             stats.update({
-                'agent_action_complexity': agent_info['action_complexity'],
-                'adversary_action_complexity': adversary_agent_info['action_complexity']  
+                'agent_action_complexity_1': agent_info_1['action_complexity'],
+                'agent_action_complexity_2': agent_info_2['action_complexity'],
+                'adversary_action_complexity_1': adversary_agent_info_1['action_complexity'],
+                'adversary_action_complexity_2': adversary_agent_info_2['action_complexity']  
             }) 
 
         return stats

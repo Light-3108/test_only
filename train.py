@@ -93,9 +93,11 @@ if __name__ == '__main__':
     train_runner = AdversarialRunner(
         args=args,
         venv=venv,
-        agent=agent, 
+        agent_1=agent_1,
+        agent_2=agent_2, 
         ued_venv=ued_venv, 
-        adversary_agent=adversary_agent,
+        adversary_agent_1=adversary_agent_1,
+        adversary_agent_2=adversary_agent_2,
         adversary_env=adversary_env,
         flexible_protagonist=False,
         train=True,
@@ -157,7 +159,6 @@ if __name__ == '__main__':
 
     # === Train === 
     # last_checkpoint_idx = getattr(train_runner, args.checkpoint_basis)
-    update_start_time = timer()
     num_updates = int(args.num_env_steps) // args.num_steps // args.num_processes
     for j in range(0, 1):
         stats = train_runner.run()
@@ -244,3 +245,9 @@ if __name__ == '__main__':
 
     # if display:
     #     display.stop()
+
+
+# remain
+# 1 update and saving ma ni change garnu parla
+# 2 runner.py ma all methods haru check if there is any mistakes
+# 3 eval.py ma ni check for multiple agents

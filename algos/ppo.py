@@ -99,9 +99,16 @@ class PPO():
                         obs_batch, recurrent_hidden_states_batch, masks_batch,
                         actions_batch, return_policy_logits=True)
                     with torch.no_grad():
-                        _, _, _, _, dist_antagonist = kl_dict['antagonist_model'].evaluate_actions(
-                        obs_batch, recurrent_hidden_states_batch, masks_batch,
-                        actions_batch, return_policy_logits=True)
+                        # which adversary agent to clone? choose randomly  , or maybe clone both? let's see
+                        random_number = random.randint(0,1)
+                        if random_number == 0:
+                            _, _, _, _, dist_antagonist = kl_dict['antagonist_model_1'].evaluate_actions(
+                                obs_batch, recurrent_hidden_states_batch, masks_batch,
+                                actions_batch, return_policy_logits=True)
+                        else:
+                            _, _, _, _, dist_antagonist = kl_dict['antagonist_model_2'].evaluate_actions(
+                                obs_batch, recurrent_hidden_states_batch, masks_batch,
+                                actions_batch, return_policy_logits=True)
                 else:
                     values, action_log_probs, dist_entropy, _ = self.actor_critic.evaluate_actions(
                         obs_batch, recurrent_hidden_states_batch, masks_batch,
