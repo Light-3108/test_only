@@ -99,7 +99,7 @@ parser.add_argument(
 parser.add_argument(
     '--num_processes',
     type=int,
-    default=32,
+    default=2,
     help='How many training CPU processes to use for experience collection.')
 parser.add_argument(
     '--num_steps',
@@ -338,7 +338,7 @@ parser.add_argument(
 # BC arguments
 parser.add_argument(
     '--use_behavioural_cloning',
-    type=str2bool, nargs='?', const=True, default=False,
+    type=str2bool, nargs='?', const=True, default=True,
     help='Whether to use behavioural cloning')
 parser.add_argument(
     '--kl_update_step',
@@ -348,7 +348,7 @@ parser.add_argument(
 parser.add_argument(
     '--kl_loss_coef',
     type=float,
-    default=0.0,
+    default=0.01,
     help='KL divergence loss coefficient for behavioural cloning (default: 0.1)')
 parser.add_argument(
     '--use_kl_only_agent',
@@ -374,7 +374,7 @@ parser.add_argument(
 # Logging arguments.
 parser.add_argument(
     '--xpid',
-    default='latest',
+    default='BC_run',
     help='Name for the training run. Used for the name of the output results directory.')
 parser.add_argument(
     '--log_dir',

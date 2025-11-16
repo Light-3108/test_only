@@ -735,6 +735,7 @@ class AdversarialRunner(object):
         if args.ued_algo == 'paired':
             env_return = torch.max( 0.5 * (adversary_agent_info_1['max_return'] + adversary_agent_info_2['max_return']) - 0.5 * (agent_info_1['mean_return'] + agent_info_2['mean_return']), \
                 torch.zeros_like(agent_info_1['mean_return']))
+            
 
         # elif args.ued_algo == 'flexible_paired':
         #     env_return = torch.zeros_like(agent_info['max_return'], dtype=torch.float, device=self.device)
@@ -893,7 +894,7 @@ class AdversarialRunner(object):
             if kl_dict_adv_agent is not None:
                 agent_1.train()
                 agent_2.train()
-                
+        
         # elif self.use_accel_paired:
             
         #     adversary_agent_info = self.agent_rollout(
